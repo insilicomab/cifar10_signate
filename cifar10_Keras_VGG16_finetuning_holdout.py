@@ -36,7 +36,7 @@ tf.random.set_seed(1234)
 photo_size = 96
 im_rows = 96 # 画像の縦ピクセルサイズ
 im_cols = 96 # 画像の横ピクセルサイズ
-im_color = 3 # 画像の色空間/グレイスケール
+im_color = 3 # 画像の色空間
 num_classes = 10 # クラス数の定義
 
 # ラベルデータの読み込み
@@ -76,9 +76,24 @@ X_train = np.array(X_train)
 特徴量エンジニアリング
 '''
 
-# 読み込んだデータを三次元配列に変換後、正規化
-X_train = X_train.reshape(-1, im_rows, im_cols, im_color)
+# 読み込んだデータを四次元配列に変換後、正規化
+train_filenumber = len(X_train)
+
+X_train = X_train.reshape(train_filenumber, im_rows, im_cols, im_color)
 X_train = X_train.astype('float32') / 255
+
+# 画像の前処理としての正規化
+def normalization(X_train):
+    X_train = X_train.reshape(train_filenumber, im_color*im_rows*im_cols)
+    
+    for filenum in range(0, train_filenumber):
+        X_train[filenum] -= np.mean(X_train[filenum])
+
+    X_train = X_train.reshape(train_filenumber, im_rows, im_cols, im_color)
+
+    return X_train
+
+normalization(X_train)
 
 # ラベルデータのOne-hot encoding
 Y_train = np.array(train_labels['label_id'])
@@ -95,8 +110,8 @@ datagen = ImageDataGenerator(featurewise_center=False,                  # 真理
                              samplewise_std_normalization=False,        # 真理値．各入力をその標準偏差で正規化
                              zca_whitening=False,                       # 真理値．ZCA白色化を適用
                              rotation_range=20,                         # 整数．画像をランダムに回転する回転範囲
-                             width_shift_range=0.2,                     # 浮動小数点数（横幅に対する割合）．ランダムに水平シフトする範囲
-                             height_shift_range=0.2,                    # 浮動小数点数（縦幅に対する割合）．ランダムに垂直シフトする範囲
+                             width_shift_range=0,                       # 浮動小数点数（横幅に対する割合）．ランダムに水平シフトする範囲
+                             height_shift_range=0,                      # 浮動小数点数（縦幅に対する割合）．ランダムに垂直シフトする範囲
                              shear_range=0,                             # 浮動小数点数．シアー強度（反時計回りのシアー角度）
                              zoom_range=0.2,                            # 浮動小数点数または[lower，upper]．ランダムにズームする範囲．浮動小数点数が与えられた場合，[lower, upper] = [1-zoom_range, 1+zoom_range]
                              channel_shift_range=0.2,                   # 浮動小数点数．ランダムにチャンネルをシフトする範囲
@@ -117,7 +132,7 @@ x_train, x_valid, y_train, y_valid = train_test_split(X_train, Y_train,
                                                       stratify=Y_train)
 
 # モデルを保存するファイルパス
-filepath = './model/cifar10_VGG16_finetuning_model_holdout_ver1.h5'
+filepath = './model/cifar10_VGG16_finetuning_model_holdout.h5'
     
 # VGG16モデルと学習済みの重みをロード（全結合層は除く）
 input_tensor = Input(shape=(im_cols, im_rows, im_color))
@@ -134,10 +149,6 @@ top_model.add(Activation("softmax"))
 
 # 全結合層を削除したVGG16モデルと上で自前で構築した全結合層を結合
 model = Model(vgg16_model.input, top_model(vgg16_model.output))
-
-# 14層目までのモデル重みを固定（VGG16のモデル重みを用いる）
-for layer in model.layers[:15]:
-    layer.trainable = False
     
 # 水増し画像を訓練用画像の形式に合わせる
 datagen.fit(x_train) 
@@ -154,7 +165,7 @@ early_stopping = EarlyStopping(monitor='val_loss', patience=5 , verbose=1)
 checkpointer = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True)
     
 # 学習を実行
-hist = model.fit_generator(datagen.flow(x_train, y_train, batch_size=64),
+hist = model.fit_generator(datagen.flow(x_train, y_train, batch_size=32),
                            epochs=150,
                            verbose=1,
                            validation_data=(x_valid, y_valid),
@@ -163,7 +174,7 @@ hist = model.fit_generator(datagen.flow(x_train, y_train, batch_size=64),
 # モデルを評価
 score = model.evaluate(x_valid, y_valid, verbose=1)
 print('正解率=', score[1], 'loss=', score[0])
-    
+
 '''
 学習過程のグラフ化
 '''
@@ -187,7 +198,7 @@ def save_model(model):
     json_string = model.to_json()
     if not os.path.isdir("cache"):
         os.mkdir("cache")
-    json_name = "architecture1.json"
+    json_name = "architecture_vgg16.json"
     open(os.path.join("cache", json_name),"w").write(json_string)
 
 save_model(model)
@@ -220,9 +231,6 @@ num_classes = 10 # クラス数の定義
 test_labels = pd.read_csv('./data/sample_submit.tsv', sep='\t', header=None)
 print(test_labels.head())
 
-# test_labelsのリスト型（list）をまとめる
-test_dic = dict(zip(test_labels[0], test_labels[1])) # id: keys, class_num: value
-
 # zipファイルのパス
 zip_path = './data/test_images.zip'
 
@@ -252,16 +260,31 @@ for i in range(10):
 # np.arrayに変換
 X_test = np.array(X_test)
 
-# 読み込んだデータをの三次元配列に変換
-X_test = X_test.reshape(-1, im_rows, im_cols, im_color)
+# 読み込んだデータを四次元配列に変換後、正規化
+test_filenumber = len(X_test)
+
+X_test = X_test.reshape(test_filenumber, im_rows, im_cols, im_color)
 X_test = X_test.astype('float32') / 255
+
+# 画像の前処理としての正規化
+def normalization(X_test):
+    X_test = X_test.reshape(test_filenumber, im_color*im_rows*im_cols)
+    
+    for filenum in range(0, test_filenumber):
+        X_test[filenum] -= np.mean(X_test[filenum])
+
+    X_test = X_test.reshape(test_filenumber, im_rows, im_cols, im_color)
+
+    return X_test
+
+normalization(X_test)
 
 # 予測データの格納リスト
 preds = []
 
 # 保存したモデル重みデータとモデル構造の読み込み
-filepath = './model/cifar10_VGG16_finetuning_model_holdout_ver1.h5'
-json_name = 'architecture1.json'
+filepath = './model/cifar10_VGG16_finetuning_model_holdout.h5'
+json_name = 'architecture_vgg16.json'
 model = model_from_json(open(os.path.join("cache", json_name)).read())
 model.load_weights(filepath)
 
@@ -286,4 +309,4 @@ print(sub.head())
 sub[1] = pred
 
 # ファイルのエクスポート
-sub.to_csv('./submit/cifar10_VGG16_finetuning_model_holdout_ver1.tsv', sep='\t', header=None, index=None)
+sub.to_csv('./submit/cifar10_VGG16_finetuning_model_holdout.tsv', sep='\t', header=None, index=None)
