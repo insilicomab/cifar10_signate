@@ -134,7 +134,7 @@ x_train, x_valid, y_train, y_valid = train_test_split(X_train, Y_train,
 # モデルを保存するファイルパス
 filepath = './model/cifar10_MobileNet_finetuning_model_holdout.h5'
     
-# ResNet50モデルと学習済みの重みをロード（全結合層は除く）
+# モデルと学習済みの重みをロード（全結合層は除く）
 input_tensor = Input(shape=(im_cols, im_rows, im_color))
 mobileNet_model = MobileNet(include_top=False, weights='imagenet', input_tensor=input_tensor)
 
@@ -288,7 +288,7 @@ json_name = 'architecture_MobileNet.json'
 model = model_from_json(open(os.path.join("cache", json_name)).read())
 model.load_weights(filepath)
 
-# 各モデルにおける推測確率の計算　
+# 推測確率の計算　
 pred = model.predict(X_test)
 pred_max = np.argmax(pred, axis=1)
 preds.append(pred_max)
