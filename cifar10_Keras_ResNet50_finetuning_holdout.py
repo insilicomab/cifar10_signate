@@ -288,7 +288,7 @@ json_name = 'architecture_resnet50.json'
 model = model_from_json(open(os.path.join("cache", json_name)).read())
 model.load_weights(filepath)
 
-# 各モデルにおける推測確率の計算　
+# 推測確率の計算　
 pred = model.predict(X_test)
 pred_max = np.argmax(pred, axis=1)
 preds.append(pred_max)
