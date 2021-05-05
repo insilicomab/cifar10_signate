@@ -153,7 +153,7 @@ for train_index, val_index in kf.split(X_train):
     top_model.add(Dense(num_classes))
     top_model.add(Activation("softmax"))
     
-    # 全結合層を削除したResNet50モデルと上で自前で構築した全結合層を結合
+    # 全結合層を削除したモデルと上で自前で構築した全結合層を結合
     model = Model(mobileNet_model.input, top_model(mobileNet_model.output))
     
     # 水増し画像を訓練用画像の形式に合わせる
